@@ -1,4 +1,4 @@
-using System.Collections;
+﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 namespace ccEngine
@@ -167,44 +167,39 @@ namespace ccEngine
     /// </summary>
     public class ccTimeEvent : MonoBehaviour
     {
-        private float CloseValue = 0.00f;
-        private int iKeyId                             = 0;
-        private float _fDelayTime                      = 0.1f;
-        private Dictionary<int , sTimeEvent> _aDir = new Dictionary<int, sTimeEvent> ();
-        private List<int> _aWaitDelEvent           = new List<int>();
-        private List<int> _aList                   = new List<int>();
-        private static ccTimeEvent _Instance;
+        private int iKeyId                                 = 0;
+        private float _fDelayTime                          = 0.1f;
+        private List<sTimeEvent> _aWaitDelEvent            = new List<sTimeEvent>();
+        private List<sTimeEvent> _aTimeEventList           = new List<sTimeEvent>();
         private sTimeEvent _sTimeEvent;
         private bool paused;
         private bool _bInit;
 
+        private static ccTimeEvent _Instance;
         /// <summary>
         /// 取得ccTimeEvent 的實例，如果沒有則會自己建立
         /// </summary>
-        /// <returns></returns>
-        public static ccTimeEvent GetInstance ()
+        public static ccTimeEvent Instance
         {
-            if ( _Instance == null )
+            get
             {
-                ccUpdateEvent _ccTimeEvent = FindObjectOfType<ccUpdateEvent>();
-                if ( _ccTimeEvent != null )
-                {
-                    _Instance = _ccTimeEvent.gameObject.AddComponent<ccTimeEvent>();
-                }
-                else
-                {
-                    GameObject oEngin = new GameObject( "ccEngine" , typeof( ccTimeEvent ) );
-                    _Instance = oEngin.GetComponent<ccTimeEvent>();
-
-                    DontDestroyOnLoad( oEngin );
-                }
-
                 if ( _Instance == null )
                 {
-                    Debug.LogError( "init ccTimeEvent Fail" );
+                    if ( ccCommonClass.ccEngineSingletonObj == null )
+                    {
+                        GameObject oEngin = new GameObject( "ccEngine" );
+                        ccCommonClass.ccEngineSingletonObj = oEngin;
+                        DontDestroyOnLoad( oEngin );
+                    }
+                    _Instance = ccCommonClass.ccEngineSingletonObj.AddComponent<ccTimeEvent>();
+
+                    if ( _Instance == null )
+                    {
+                        Debug.LogError( "Init ccTimeEvent Fail" );
+                    }
                 }
+                return _Instance;
             }
-            return _Instance;
         }
 
         /// <summary>
@@ -232,18 +227,14 @@ namespace ccEngine
                     iId = ++iKeyId ,
                     m_fDelayTime = fDelayTime ,
                     m_fSurplusTime = fDelayTime ,
-                    //4捨5入  3.05f = 31次, 3.49f = 30次  4捨5入取到小數點第二位
-                    iExcuteCount = CommonClass.Round( fTemp , 0 ) ,
+                    //4捨5入  3.05f = 31次, 3.049f = 30次 ，4捨5入取到小數點第二位
+                    iExcuteCount = ccCommonClass.Round( fTemp , 0 ) ,
                     m_bRepeat = bRePeat ,
                     m_oData = oData ,
                     m_ccCallback = tccCallback ,
                     m_bUsePause = bUsePause
                 };
-                //初始化已經在跑了要補加一次
-                if ( _bInit )
-                    tClass1.iExcuteCount++;
-                _aDir.Add( iKeyId , tClass1 );
-                _aList.Add( iKeyId );
+                _aTimeEventList.Add( tClass1 );
                 this.Init();
                 return ( int ) tClass1.iId;
             }
@@ -271,10 +262,10 @@ namespace ccEngine
         /// <param name="iEventId">填入系統返回的ID</param>
         public void f_UnRegEvent ( int iEventId )
         {
-            if ( _aList.Exists( iId => iId == iEventId ) != false )
+            int iIndex = _aTimeEventList.FindIndex( e => e.iId == iEventId );
+            if ( iIndex != -1 )
             {
-                this._aDir.Remove( iEventId );
-                this._aList.Remove( iEventId );
+                this._aTimeEventList.RemoveAt( iIndex );
                 CheckInvokeAmount();
             }
             else
@@ -288,48 +279,78 @@ namespace ccEngine
         /// </summary>
         public void f_UnRegAllEvent ()
         {
-            this._aDir.Clear();
-            this._aList.Clear();
+            this._aTimeEventList.Clear();
             CheckInvokeAmount();
         }
 
         /// <summary>
-        /// 取得指定ID的事件目前剩餘的執行次數，每個次數0.1秒，可自行換算
-        /// 找不到時，回傳int類型 數值0
+        /// 取得指定ID的事件目前剩餘的執行時間
+        /// 找不到時，回傳float類型 數值 -99
         /// </summary>
         /// <param name="iEventID"></param>
         /// <returns></returns>
-        public int f_GetTimeEventExcuteCount ( int iEventID )
+        public float f_GetTimeEventExcuteTime ( int iEventID )
         {
-            if ( _aDir.ContainsKey( iEventID ) )
-                return _aDir[ iEventID ].iExcuteCount;
+            sTimeEvent _sTimeEvent = _aTimeEventList.Find( e => e.iId == iEventID );
+            if ( _sTimeEvent != null )
+                return _sTimeEvent.iExcuteCount * this._fDelayTime;
             else
             {
-                Debug.Log( "f_GetTimeEventExcuteCount 找不到此 iEventID 事件" );
-                return 0;
+                Debug.Log( "ccTimeEvent : f_GetTimeEventExcuteTime 找不到此 " + iEventID
+                   + " 事件" );
+                return -99;
             }
         }
 
         /// <summary>
-        /// 增加指定ID的事件目前剩餘的執行次數，每個次數為0.1秒，可自行換算
+        /// 增加指定ID的事件執行時間
+        /// 可為負數，如果相加後小於等於0，則直接完成計時
         /// </summary>
         /// <param name="iEventID">該時間事件的ID</param>
-        /// <param name="fSecond">增加的秒數(float)，可為負的(會相減)，如果相減後低於0則直接完成計時</param>
+        /// <param name="fSecond">增加的秒數(float)，可為負的(會相減)，如果相減後低於0則直接完成計時，
+        /// 4捨5入  3.05f = 31次, 3.049f = 30次 ，4捨5入取到小數點第二位</param>
         /// <returns></returns>
-        public void f_AddTimeEventExcuteCount ( int iEventID , float fSecond )
+        public void f_AddTimeEventExcuteTime ( int iEventID , float fSecond )
         {
-            int _ExcCount = Mathf.CeilToInt( fSecond / this._fDelayTime );
+            float fTemp = fSecond / this._fDelayTime;
+            int _ExcCount = ccCommonClass.Round( fTemp , 0 );
 
-            if ( _aDir.ContainsKey( iEventID ) )
-                _aDir[ iEventID ].iExcuteCount += _ExcCount;
+            sTimeEvent _sTimeEvent = _aTimeEventList.Find( e => e.iId == iEventID );
+            if ( _sTimeEvent != null )
+                _sTimeEvent.iExcuteCount += _ExcCount;
             else
             {
-                Debug.Log( "f_AddTimeEventExcuteCount 找不到此 iEventID 事件" );
+                Debug.Log( "ccTimeEvent : f_AddTimeEventExcuteTime 找不到此 " + iEventID
+                    + " 事件" );
+            }
+        }
+
+        /// <summary>
+        /// 設定指定ID的事件執行時間
+        /// fSecond可為負數，如果fSecond小於等於0，則直接完成計時
+        /// </summary>
+        /// <param name="iEventID">該時間事件的ID</param>
+        /// <param name="fSecond">設定的秒數(float)，可為負的(會相減)，如果相減後低於0則直接完成計時，
+        /// 4捨5入  3.05f = 31次, 3.049f = 30次 ，4捨5入取到小數點第二位</param>
+        /// <returns></returns>
+        public void f_SetTimeEventExcuteTime ( int iEventID , float fSecond )
+        {
+            float fTemp = fSecond / this._fDelayTime;
+            int _ExcCount = ccCommonClass.Round( fTemp , 0 );
+
+            sTimeEvent _sTimeEvent = _aTimeEventList.Find( e => e.iId == iEventID );
+            if ( _sTimeEvent != null )
+                _sTimeEvent.iExcuteCount = _ExcCount;
+            else
+            {
+                Debug.Log( "ccTimeEvent : f_AddTimeEventExcuteCount 找不到此 " + iEventID
+                   + " 事件" );
             }
         }
 
         private void Init ()
         {
+            //檢查是否初始化過，只創造一個InvokeRepeating
             if ( !this._bInit )
             {
                 this._bInit = true;
@@ -344,19 +365,19 @@ namespace ccEngine
         }
         private void CustomUpdate ()
         {
-            if ( this._aList.Count > 0 )
+            if ( this._aTimeEventList.Count > 0 )
             {
-                for ( int i = 0 ; i < this._aList.Count ; i++ )
+                for ( int i = 0 ; i < this._aTimeEventList.Count ; i++ )
                 {
-                    this._sTimeEvent = ( sTimeEvent ) _aDir[ this._aList[ i ] ];
+                    this._sTimeEvent = this._aTimeEventList[ i ];
                     if ( !this._sTimeEvent.m_bUsePause || !this.paused )
                     {
                         this._sTimeEvent.iExcuteCount -= 1;
-                        if (/* this._sTimeEvent.m_fSurplusTime <=  CloseValue */this._sTimeEvent.iExcuteCount <= 0 )
+                        if ( this._sTimeEvent.iExcuteCount <= 0 )
                         {
                             if ( this._sTimeEvent.m_ccCallback == null )
                             {
-                                this._aWaitDelEvent.Add( ( int ) this._sTimeEvent.iId );
+                                this._aWaitDelEvent.Add( this._sTimeEvent );
                             }
                             else
                             {
@@ -364,11 +385,11 @@ namespace ccEngine
                                 if ( this._sTimeEvent.m_bRepeat )
                                 {
                                     float fTemp = this._sTimeEvent.m_fDelayTime / this._fDelayTime;
-                                    this._sTimeEvent.iExcuteCount = CommonClass.Round( fTemp , 0 );
+                                    this._sTimeEvent.iExcuteCount = ccCommonClass.Round( fTemp , 0 );
                                 }
                                 else
                                 {
-                                    this._aWaitDelEvent.Add( ( int ) this._sTimeEvent.iId );
+                                    this._aWaitDelEvent.Add( this._sTimeEvent );
                                 }
                             }
                         }
@@ -376,10 +397,9 @@ namespace ccEngine
                 }
                 if ( this._aWaitDelEvent.Count > 0 )
                 {
-                    foreach ( int num2 in this._aWaitDelEvent )
+                    for ( int i = 0 ; i < _aWaitDelEvent.Count ; i++ )
                     {
-                        this._aDir.Remove( num2 );
-                        this._aList.Remove( num2 );
+                        this._aTimeEventList.Remove( _aWaitDelEvent[ i ] );
                     }
                     this._aWaitDelEvent.Clear();
                     CheckInvokeAmount();
@@ -389,7 +409,7 @@ namespace ccEngine
 
         private void CheckInvokeAmount ()
         {
-            if ( _aList.Count == 0 )
+            if ( _aTimeEventList.Count == 0 )
             {
                 CancelInvoke( "Xsfdsfasdfadsfa" );
                 _bInit = false;
@@ -405,88 +425,43 @@ namespace ccEngine
     public class ccUpdateEvent : MonoBehaviour
     {
         private int iKeyId;
-        private Dictionary<int , sTimeEvent> _aDir = new Dictionary<int, sTimeEvent> ();
-        private List<int> _aWaitDelEvent           = new List<int>();
-        private List<int> _aList                   = new List<int>();
+        private List<sTimeEvent> _aWaitDelEvent         = new List<sTimeEvent>();
+        private List<sTimeEvent> _aTimeEventList        = new List<sTimeEvent>();
         private sTimeEvent _sTimeEvent;
         private bool paused;
         private bool _bInit;
-        private static ccUpdateEvent _Instance;
 
         /// <summary>
         /// 可使用此sTimeEvent當作參數  直接修改就可以不用儲存在自己的Class中了
         /// </summary>
         public static sTimeEvent m_sTimeEvent = new sTimeEvent ();
 
+        private static ccUpdateEvent _Instance;
         /// <summary>
-        /// 取得ccUpdateEvent 的實例，如果沒有則會自己建立
+        /// 取得ccUpdateEvent 的實例，如果沒有則會自己建立。
         /// </summary>
-        /// <returns></returns>
-        public static ccUpdateEvent GetInstance ()
+        public static ccUpdateEvent Instance
         {
-            if ( _Instance == null )
+            get
             {
-                ccTimeEvent _ccTimeEvent = FindObjectOfType<ccTimeEvent>();
-                if ( _ccTimeEvent != null )
-                {
-                    _Instance = _ccTimeEvent.gameObject.AddComponent<ccUpdateEvent>();
-                }
-                else
-                {
-                    GameObject oEngin = new GameObject( "ccEngine" , typeof( ccUpdateEvent ) );
-                    _Instance = oEngin.GetComponent<ccUpdateEvent>();
-
-                    DontDestroyOnLoad( oEngin );
-                }
-                //_Instance = FindObjectOfType( typeof( ccUpdateEvent ) ) as ccUpdateEvent;
                 if ( _Instance == null )
                 {
-                    Debug.LogError( "init ccUpdateEvent Fail" );
+                    if ( ccCommonClass.ccEngineSingletonObj == null )
+                    {
+                        GameObject oEngin = new GameObject( "ccEngine" );
+                        ccCommonClass.ccEngineSingletonObj = oEngin;
+                        DontDestroyOnLoad( oEngin );
+                    }
+                    _Instance = ccCommonClass.ccEngineSingletonObj.AddComponent<ccUpdateEvent>();
+
+                    if ( _Instance == null )
+                    {
+                        Debug.LogError( "Init ccTimeEvent Fail" );
+                    }
                 }
-            }
-            return _Instance;
-        }
-        /// <summary>
-        /// 解除特定iEventId的事件
-        /// </summary>
-        /// <param name="iEventId">填入系統返回的ID</param>
-        public void f_UnRegEvent ( int iEventId )
-        {
-            if ( _aList.Exists( iId => iId == iEventId ) != false )
-            {
-                this._aDir.Remove( iEventId );
-                this._aList.Remove( iEventId );
-            }
-            else
-            {
-                Debug.Log( "ccUptateEvent 找不到此 iEventId : " + iEventId );
+                return _Instance;
             }
         }
-        /// <summary>
-        /// 解除所有已註冊的事件
-        /// </summary>
-        public void f_UnRegAllEvent ()
-        {
-            this._aDir.Clear();
-            this._aList.Clear();
-        }
-
-        /// <summary>
-        /// 暫停當初註冊時設定可被暫停的事件
-        /// </summary>
-        public void f_Pause ()
-        {
-            this.paused = true;
-        }
-
-        /// <summary>
-        /// 回復所有(可被暫停的)事件
-        /// </summary>
-        public void f_Resume ()
-        {
-            this.paused = false;
-        }
-
 
         /// <summary>
         /// 對 ccUpdateEvent 註冊 Update 事件 ,
@@ -495,29 +470,30 @@ namespace ccEngine
         /// <param name="fDelayTime">一開始Delay的時間，預設為0秒</param>
         /// <param name="fRunTime">總共執行中的時間</param>
         /// <param name="tccCallback">每幀會被呼叫的函數</param>
-        /// <param name="tccCallbackComplete">結束後會被呼叫的函數</param>
+        /// <param name="tccCallbackComplete">最後一幀結束後會被呼叫的函數，如果為空，則預設與tccCallback同函數</param>
         /// <param name="oData">可提供一個可以回傳的參數，如int,GameObject等，可不填，預設為Null</param>
         /// <param name="bUsePause">此事件是否可以被暫停，可不填，預設為不可被暫停</param>
-        /// <param name="bCallBackSurplusTime">是否傳回剩餘的時間，預設為不回傳，只回傳參數</param>
+        /// <param name="bCallBackSurplusTime">是否傳回剩餘的時間，預設為回傳剩餘時間，如果oData不為null則此值為 true </param>
         /// <returns></returns>
-        public int f_RegEvent ( float fRunTime , ccCallback tccCallback , float fDelayTime = 0 ,
-            ccCallback tccCallbackComplete = null , object oData = null , bool bUsePause = false ,
-            bool bCallBackSurplusTime = false )
+        public int f_RegEvent ( float fRunTime , ccCallback tccCallback ,
+            float fDelayTime = 0 , ccCallback tccCallbackComplete = null ,
+            object oData = null , bool bUsePause = false ,
+            bool bCallBackSurplusTime = true )
         {
             return this.f_RegEventForTeam( fDelayTime , fRunTime , oData , tccCallback ,
                 tccCallbackComplete , bUsePause , bCallBackSurplusTime );
         }
 
         /// <summary>
-        /// 至少要給予m_fSurplusTime、m_ccCallback 否則將不會執行
+        /// 至少要給予m_fSurplusTime、m_ccCallback 否則將不會執行，
         /// </summary>
         /// <param name="tsTimeEvent">給予一個sTimeEvent類別的物件
         /// 可使用ccUpdateEvent中的m_sTimeEvent去new出來</param>
         /// <returns></returns>
         public int f_RegEvent ( sTimeEvent tsTimeEvent )
         {
-            return this.f_RegEventForTeam( ( float ) tsTimeEvent.m_fDelayTime ,
-                ( float ) tsTimeEvent.m_fSurplusTime , tsTimeEvent.m_oData ,
+            return this.f_RegEventForTeam( tsTimeEvent.m_fDelayTime ,
+                tsTimeEvent.m_fSurplusTime , tsTimeEvent.m_oData ,
                 tsTimeEvent.m_ccCallback , tsTimeEvent.m_ccCallbackComplete ,
                 tsTimeEvent.m_bUsePause , tsTimeEvent.m_bCallBackSurplusTime );
         }
@@ -569,6 +545,14 @@ namespace ccEngine
         {
             if ( ( tccCallback != null ) && ( fDelayTime >= 0f ) )
             {
+                //額外條件
+                //如果complete為空，則指定給tccCallback
+                if ( tccCallbackComplete == null )
+                    tccCallbackComplete = tccCallback;
+                //如果參數為空，則自動回傳剩餘秒數
+                if ( oData != null )
+                    bCallBackSurplusTime = false;
+
                 sTimeEvent tClass1 = new sTimeEvent
                 {
                     iId = ++iKeyId ,
@@ -580,8 +564,7 @@ namespace ccEngine
                     m_bUsePause = bUsePause ,
                     m_bCallBackSurplusTime = bCallBackSurplusTime
                 };
-                _aDir.Add( iKeyId , tClass1 );
-                _aList.Add( iKeyId );
+                _aTimeEventList.Add( tClass1 );
 
                 if ( this.enabled == false )
                     this.enabled = true;
@@ -589,13 +572,105 @@ namespace ccEngine
             }
             return -99;
         }
+        /// <summary>
+        /// 回復所有(可被暫停的)事件
+        /// </summary>
+        public void f_Resume ()
+        {
+            this.paused = false;
+        }
+
+
+        /// <summary>
+        /// 暫停當初註冊時設定可被暫停的事件
+        /// </summary>
+        public void f_Pause ()
+        {
+            this.paused = true;
+        }
+
+        /// <summary>
+        /// 解除特定iEventId的事件
+        /// </summary>
+        /// <param name="iEventId">填入系統返回的ID</param>
+        public void f_UnRegEvent ( int iEventId )
+        {
+            int iIndex = _aTimeEventList.FindIndex( e => e.iId == iEventId );
+            if ( iIndex != -1 )
+            {
+                this._aTimeEventList.RemoveAt( iIndex );
+            }
+            else
+            {
+                Debug.Log( "ccUptateEvent 找不到此 iEventId : " + iEventId );
+            }
+        }
+        /// <summary>
+        /// 解除所有已註冊的事件
+        /// </summary>
+        public void f_UnRegAllEvent ()
+        {
+            this._aTimeEventList.Clear();
+        }
+
+        /// <summary>
+        /// 取得指定ID的事件目前剩餘的秒數
+        /// 找不到時，回傳float類型 數值0f
+        /// </summary>
+        /// <param name="iEventID"></param>
+        /// <returns></returns>
+        public float f_GetTimeEventExcuteCount ( int iEventID )
+        {
+            sTimeEvent _sTimeEvent = _aTimeEventList.Find( e => e.iId == iEventID );
+            if ( _aTimeEventList != null )
+                return _sTimeEvent.m_fSurplusTime;
+            else
+            {
+                Debug.Log( "f_GetTimeEventExcuteCount 找不到此 iEventID 事件" );
+                return 0f;
+            }
+        }
+
+        /// <summary>
+        /// 增加指定ID的事件目前秒數，可為負數，如果相加後小於等於0，則事件結束
+        /// </summary>
+        /// <param name="iEventID">該時間事件的ID</param>
+        /// <param name="fSecond">增加的秒數(float)，可為負的(會相減)，如果相減後低於0則直接完成計時</param>
+        /// <returns></returns>
+        public void f_AddTimeEventExcuteCount ( int iEventID , float fSecond )
+        {
+            sTimeEvent _sTimeEvent = _aTimeEventList.Find( e => e.iId == iEventID );
+            if ( _sTimeEvent != null )
+                _sTimeEvent.m_fSurplusTime += fSecond;
+            else
+            {
+                Debug.Log( "ccUpdateEvent : f_AddTimeEventExcuteCount 找不到此 " + iEventID + " 事件" );
+            }
+        }
+        /// <summary>
+        /// 設定指定ID的事件目前秒數，可為負數，如果設定後秒數小於等於0，則事件結束
+        /// </summary>
+        /// <param name="iEventID">該時間事件的ID</param>
+        /// <param name="fSecond">設定的秒數(float)，可為負的，如果設定後低於0則直接完成計時</param>
+        /// <returns></returns>
+        public void f_SetTimeEventExcuteTime ( int iEventID , float fSecond )
+        {
+            sTimeEvent _sTimeEvent = _aTimeEventList.Find( e => e.iId == iEventID );
+            if ( _sTimeEvent != null )
+                _sTimeEvent.m_fSurplusTime = fSecond;
+            else
+            {
+                Debug.Log( "ccTimeEvent : f_GetTimeEventExcuteTime 找不到此 " + iEventID
+                   + " 事件" );
+            }
+        }
         private void Update ()
         {
-            if ( this._aList.Count > 0 )
+            if ( this._aTimeEventList.Count > 0 )
             {
-                for ( int i = 0 ; i < this._aList.Count ; i++ )
+                for ( int i = 0 ; i < this._aTimeEventList.Count ; i++ )
                 {
-                    this._sTimeEvent = _aDir[ this._aList[ i ] ];
+                    this._sTimeEvent = this._aTimeEventList[ i ];
                     if ( !this._sTimeEvent.m_bUsePause || !this.paused )
                     {
                         if ( this._sTimeEvent.m_bInit == false )
@@ -614,7 +689,7 @@ namespace ccEngine
                             {
                                 if ( this._sTimeEvent.m_ccCallback == null )
                                 {
-                                    this._aWaitDelEvent.Add( ( int ) this._sTimeEvent.iId );
+                                    this._aWaitDelEvent.Add( this._sTimeEvent );
                                 }
                                 else
                                 {
@@ -626,7 +701,7 @@ namespace ccEngine
                             }
                             else
                             {
-                                this._aWaitDelEvent.Add( ( int ) this._sTimeEvent.iId );
+                                this._aWaitDelEvent.Add( this._sTimeEvent );
                                 if ( this._sTimeEvent.m_ccCallbackComplete != null )
                                 {
                                     if ( this._sTimeEvent.m_bCallBackSurplusTime == false )
@@ -642,10 +717,10 @@ namespace ccEngine
                 }
                 if ( this._aWaitDelEvent.Count > 0 )
                 {
-                    foreach ( int num2 in this._aWaitDelEvent )
+                    for ( int i = 0 ; i < _aWaitDelEvent.Count ; i++ )
                     {
-                        this._aDir.Remove( num2 );
-                        this._aList.Remove( num2 );
+                        this._aTimeEventList.Remove( _aWaitDelEvent[ i ] );
+
                     }
                     this._aWaitDelEvent.Clear();
                 }
@@ -658,37 +733,40 @@ namespace ccEngine
     }
 
     /// <summary>
+    /// 四種搖晃類型，
+    /// 1.垂直
+    /// 2.水平
+    /// 3.垂直 + 水平
+    /// 4.三軸
+    /// </summary>
+    public enum eShakeType
+    {
+        /// <summary>
+        /// 1.垂直
+        /// </summary>
+        Vertical,
+        /// <summary>
+        /// 2.水平
+        /// </summary>
+        Horizontal,
+        /// <summary>
+        /// 3.垂直 + 水平
+        /// </summary>
+        VerticalAndHorizontal,
+        /// <summary>
+        /// 4.三軸
+        /// </summary>
+        Sphere,
+    }
+
+
+    /// <summary>
     /// 可註冊一個搖晃物體的事件，結束時也可註冊函式等著被呼叫
     /// 註冊的物體不限為攝影機，普通遊戲物件都可
     /// </summary>
-    public class CameraShake
+    public class ccShaking
     {
-        /// <summary>
-        /// 四種搖晃類型，
-        /// 1.垂直
-        /// 2.水平
-        /// 3.垂直 + 水平
-        /// 4.三軸
-        /// </summary>
-        public enum eShakeType
-        {
-            /// <summary>
-            /// 1.垂直
-            /// </summary>
-            Vertical,
-            /// <summary>
-            /// 2.水平
-            /// </summary>
-            Horizontal,
-            /// <summary>
-            /// 3.垂直 + 水平
-            /// </summary>
-            VerticalAndHorizontal,
-            /// <summary>
-            /// 4.三軸
-            /// </summary>
-            Sphere,
-        }
+
 
         /// <summary>
         /// 搖晃物件；
@@ -714,7 +792,7 @@ namespace ccEngine
             obj[ 2 ] = fShakeAmount;
             obj[ 3 ] = _eShakeType;
             obj[ 4 ] = tccCalllbackComplete;
-            return ccUpdateEvent.GetInstance().f_RegEvent( fShakeDuration , Shake , fDelayTime , ShakeComplete , obj , bUsePause );
+            return ccUpdateEvent.Instance.f_RegEvent( fShakeDuration , Shake , fDelayTime , ShakeComplete , obj , bUsePause );
         }
 
         private static void Shake ( object data )
@@ -769,11 +847,16 @@ namespace ccEngine
         }
     }
 
+
     /// <summary>
     /// 通用類別
     /// </summary>
-    public class CommonClass
+    public class ccCommonClass
     {
+        /// <summary>
+        /// ccTimeEvent與ccUpdate 中會用到的Singleton GameObject
+        /// </summary>
+        public static GameObject ccEngineSingletonObj;
         /// <summary>
         /// 四捨五入
         /// </summary>
@@ -792,4 +875,5 @@ namespace ccEngine
             return ( int ) ( temp / vt );
         }
     }
+
 }
