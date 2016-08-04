@@ -7,7 +7,8 @@ public class GameMain : MonoBehaviour
     public Sprite[] NumSprite;
     public Image UI_TimeImg;
     public Button UI_StartGame;
-    public GameObject GameOverUI;
+    public GameObject GameOverUI ;
+    public GameObject ScorePoint ;
     private Image Img_Ten , Img_Num;
     private GameObjectSpawn m_GameObjectSpawn;
     private static GameMain _Instance = null;
@@ -39,25 +40,17 @@ public class GameMain : MonoBehaviour
         m_GameObjectSpawn = GetComponent<GameObjectSpawn>();
         Img_Ten = GameOverUI.transform.FindChild( "Ten" ).GetComponent<Image>();
         Img_Num = GameOverUI.transform.FindChild( "Num" ).GetComponent<Image>();
-       
+
         UI_StartGame.onClick.AddListener( delegate ()
         {
-            print( UI_StartGame );
-
             this.OnStartGameClick();
         } );
 
         UI_TimeImg.gameObject.SetActive( false );
         GameOverUI.SetActive( false );
     }
-    void test ()
-    {
-
-    }
     private void OnStartGameClick ()
     {
-        print( UI_StartGame );
-
         UI_StartGame.gameObject.SetActive( false );
         InitGame();
     }
@@ -69,9 +62,12 @@ public class GameMain : MonoBehaviour
         Img_Num.sprite = GetUIImage( iNum );
         UI_StartGame.gameObject.SetActive( true );
         GameOverUI.SetActive( true );
+        ScorePoint.SetActive( false );
+        GameScore = 0;
     }
     private void InitGame ()
     {
+        ScorePoint.SetActive( true );
         GameOverUI.SetActive( false );
         UI_TimeImg.gameObject.SetActive( true );
         UI_TimeImg.sprite = GetUIImage( 3 );
@@ -79,9 +75,8 @@ public class GameMain : MonoBehaviour
         ccUpdateEvent.Instance.f_RegEvent( ccUpdateEvent.m_sTimeEvent );
     }
 
-    private void CountDownCallBack ( object data )
+    private void CountDownCallBack ( object data , float fTime )
     {
-        float fTime = ( float ) data;
         int CeilTime = Mathf.CeilToInt( fTime );
         UI_TimeImg.sprite = GetUIImage( CeilTime );
         if ( CeilTime == 0 )

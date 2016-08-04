@@ -8,6 +8,12 @@ namespace ccEngine
     /// </summary>
     /// <param name="data">object類型 可接受任何類型</param>
     public delegate void ccCallback ( object data );
+    /// <summary>
+    /// 帶有兩個參數的CallBack，通常給UpdateEvent使用
+    /// </summary>
+    /// <param name="data">註冊的參數回傳</param>
+    /// <param name="data2">，第二個為事件剩餘時間</param>
+    public delegate void ccCallbackV2 ( object data , float data2 );
 
     /// <summary>
     /// 基礎時間事件類別
@@ -28,17 +34,17 @@ namespace ccEngine
         /// </summary>
         public bool m_bInit ;
         /// <summary>
-        /// 是否回傳剩餘時間 如果值為true則會取代自帶參數object
-        /// </summary>
-        public bool m_bCallBackSurplusTime;
-        /// <summary>
         /// 每個Update中會被呼叫的函數
         /// </summary>
-        public ccCallback m_ccCallback ;
+        public ccCallbackV2 m_ccCallbackV2 ;
         /// <summary>
         /// 最後一次完成後會呼叫的函數
         /// </summary>
-        public ccCallback m_ccCallbackComplete ;
+        public ccCallbackV2 m_ccCallbackV2Complete ;
+        /// <summary>
+        /// ccTimeEvent結束呼叫
+        /// </summary>
+        public ccCallback m_ccCallback ;
         /// <summary>
         /// 自帶參數
         /// </summary>
@@ -98,27 +104,22 @@ namespace ccEngine
         /// 此事件是否可以被暫停 bool 類型
         /// </summary>
         public const string strUsePause = "UsePause";
-        /// <summary>
-        /// 是否回傳剩餘時間 bool類型 如果為true則會取代自帶參數object
-        /// </summary>
-        public const string strCallBackSurplusTime = "CallBackSurplusTime";
         #endregion
 
         /// <summary>
-        /// 用來註冊有時限的Update事件，例如 畫面中 UI文字 5秒內不斷倒數的功能；
+        /// 用來註冊有時限的ccUpdateEvent，例如 畫面中 UI文字 5秒內不斷倒數的功能；
         /// 用來註冊時間內不斷作判斷的事件，例如 遊戲開始後30秒內不斷確定分數有沒有達到一百分
         /// Ex: 5秒內是否有鍵盤按下等
         /// 預設為可以被暫停
         /// </summary>
         /// <param name="fRunTime">總執行時間</param>
         /// <param name="tCCcallback">每次的fun與結束fun都會註冊相同的fun</param>
-        public sTimeEvent ( float fRunTime , ccCallback tCCcallback )
+        public sTimeEvent ( float fRunTime , ccCallbackV2 tCCcallbackV2 )
         {
             m_fSurplusTime = fRunTime;
-            m_ccCallback = tCCcallback;
-            m_ccCallbackComplete = tCCcallback;
+            m_ccCallbackV2 = tCCcallbackV2;
+            m_ccCallbackV2Complete = tCCcallbackV2;
             m_bUsePause = true;
-            m_bCallBackSurplusTime = true;
         }
 
         /// <summary>
@@ -475,13 +476,12 @@ namespace ccEngine
         /// <param name="bUsePause">此事件是否可以被暫停，可不填，預設為不可被暫停</param>
         /// <param name="bCallBackSurplusTime">是否傳回剩餘的時間，預設為回傳剩餘時間，如果oData不為null則此值為 true </param>
         /// <returns></returns>
-        public int f_RegEvent ( float fRunTime , ccCallback tccCallback ,
-            float fDelayTime = 0 , ccCallback tccCallbackComplete = null ,
-            object oData = null , bool bUsePause = false ,
-            bool bCallBackSurplusTime = true )
+        public int f_RegEvent ( float fRunTime , ccCallbackV2 tccCallbackV2 ,
+            float fDelayTime = 0 , ccCallbackV2 tccCallbackV2Complete = null ,
+            object oData = null , bool bUsePause = false )
         {
-            return this.f_RegEventForTeam( fDelayTime , fRunTime , oData , tccCallback ,
-                tccCallbackComplete , bUsePause , bCallBackSurplusTime );
+            return this.f_RegEventForTeam( fDelayTime , fRunTime , oData , tccCallbackV2 ,
+                tccCallbackV2Complete , bUsePause );
         }
 
         /// <summary>
@@ -494,8 +494,8 @@ namespace ccEngine
         {
             return this.f_RegEventForTeam( tsTimeEvent.m_fDelayTime ,
                 tsTimeEvent.m_fSurplusTime , tsTimeEvent.m_oData ,
-                tsTimeEvent.m_ccCallback , tsTimeEvent.m_ccCallbackComplete ,
-                tsTimeEvent.m_bUsePause , tsTimeEvent.m_bCallBackSurplusTime );
+                tsTimeEvent.m_ccCallbackV2 , tsTimeEvent.m_ccCallbackV2Complete ,
+                tsTimeEvent.m_bUsePause );
         }
 
         /// <summary>
@@ -524,34 +524,25 @@ namespace ccEngine
 
             if ( hashTable[ sTimeEvent.strCcCallbackComplete ] != null &&
                 hashTable[ sTimeEvent.strCcCallbackComplete ] is ccCallback )
-                m_sTimeEvent.m_ccCallbackComplete =
-                    ( ccCallback ) hashTable[ sTimeEvent.strCcCallbackComplete ];
+                m_sTimeEvent.m_ccCallbackV2Complete =
+                    ( ccCallbackV2 ) hashTable[ sTimeEvent.strCcCallbackComplete ];
 
             if ( hashTable[ sTimeEvent.strUsePause ] != null &&
                 hashTable[ sTimeEvent.strUsePause ] is bool )
                 m_sTimeEvent.m_bUsePause = ( bool ) hashTable[ sTimeEvent.strUsePause ];
 
-            if ( hashTable[ sTimeEvent.strCallBackSurplusTime ] != null &&
-                hashTable[ sTimeEvent.strCallBackSurplusTime ] is bool )
-                m_sTimeEvent.m_bCallBackSurplusTime =
-                    ( bool ) hashTable[ sTimeEvent.strCallBackSurplusTime ];
-
             return this.f_RegEvent( m_sTimeEvent );
         }
 
         private int f_RegEventForTeam ( float fDelayTime , float fRunTime , object oData ,
-            ccCallback tccCallback , ccCallback tccCallbackComplete , bool bUsePause ,
-            bool bCallBackSurplusTime )
+            ccCallbackV2 tccCallbackV2 , ccCallbackV2 tccCallbackV2Complete , bool bUsePause  )
         {
-            if ( ( tccCallback != null ) && ( fDelayTime >= 0f ) )
+            if ( ( tccCallbackV2 != null ) && ( fDelayTime >= 0f ) )
             {
                 //額外條件
                 //如果complete為空，則指定給tccCallback
-                if ( tccCallbackComplete == null )
-                    tccCallbackComplete = tccCallback;
-                //如果參數為空，則自動回傳剩餘秒數
-                if ( oData != null )
-                    bCallBackSurplusTime = false;
+                if ( tccCallbackV2Complete == null )
+                    tccCallbackV2Complete = tccCallbackV2;
 
                 sTimeEvent tClass1 = new sTimeEvent
                 {
@@ -559,10 +550,9 @@ namespace ccEngine
                     m_fDelayTime = fDelayTime ,
                     m_fSurplusTime = fRunTime ,
                     m_oData = oData ,
-                    m_ccCallback = tccCallback ,
-                    m_ccCallbackComplete = tccCallbackComplete ,
+                    m_ccCallbackV2 = tccCallbackV2 ,
+                    m_ccCallbackV2Complete = tccCallbackV2Complete ,
                     m_bUsePause = bUsePause ,
-                    m_bCallBackSurplusTime = bCallBackSurplusTime
                 };
                 _aTimeEventList.Add( tClass1 );
 
@@ -687,28 +677,21 @@ namespace ccEngine
                             this._sTimeEvent.m_fSurplusTime -= Time.deltaTime;
                             if ( this._sTimeEvent.m_fSurplusTime > 0f )
                             {
-                                if ( this._sTimeEvent.m_ccCallback == null )
+                                if ( this._sTimeEvent.m_ccCallbackV2 == null )
                                 {
                                     this._aWaitDelEvent.Add( this._sTimeEvent );
                                 }
                                 else
                                 {
-                                    if ( this._sTimeEvent.m_bCallBackSurplusTime == false )
-                                        this._sTimeEvent.m_ccCallback( this._sTimeEvent.m_oData );
-                                    else
-                                        this._sTimeEvent.m_ccCallback( this._sTimeEvent.m_fSurplusTime );
+                                    this._sTimeEvent.m_ccCallbackV2( this._sTimeEvent.m_oData , this._sTimeEvent.m_fSurplusTime );
                                 }
                             }
                             else
                             {
                                 this._aWaitDelEvent.Add( this._sTimeEvent );
-                                if ( this._sTimeEvent.m_ccCallbackComplete != null )
+                                if ( this._sTimeEvent.m_ccCallbackV2Complete != null )
                                 {
-                                    if ( this._sTimeEvent.m_bCallBackSurplusTime == false )
-                                        this._sTimeEvent.m_ccCallbackComplete( this._sTimeEvent.m_oData );
-                                    else
-                                        this._sTimeEvent.m_ccCallbackComplete
-                                            ( 0f );
+                                    this._sTimeEvent.m_ccCallbackV2Complete( this._sTimeEvent.m_oData , 0f );
                                 }
                             }
 
@@ -766,8 +749,6 @@ namespace ccEngine
     /// </summary>
     public class ccShaking
     {
-
-
         /// <summary>
         /// 搖晃物件；
         /// fShakeAmount為 一倍時；位移量各為1，請視情況修改fShakeAmount(力道)
@@ -795,7 +776,7 @@ namespace ccEngine
             return ccUpdateEvent.Instance.f_RegEvent( fShakeDuration , Shake , fDelayTime , ShakeComplete , obj , bUsePause );
         }
 
-        private static void Shake ( object data )
+        private static void Shake ( object data , float fTime )
         {
             Vector3 v = Vector3.zero;
 
@@ -827,7 +808,7 @@ namespace ccEngine
                 camTransform.localPosition = originalPos + v * fShakeAmount;
 
         }
-        private static void ShakeComplete ( object data )
+        private static void ShakeComplete ( object data , float fTime )
         {
             object[] obj = ( object[] ) data;
             Transform camTransform = ( Transform ) obj[ 0 ];

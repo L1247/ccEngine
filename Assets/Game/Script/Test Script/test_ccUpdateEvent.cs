@@ -1,25 +1,28 @@
 ﻿using ccEngine;
 using UnityEngine;
 
-public class test_ccUpdateEvent : MonoBehaviour {
+public class test_ccUpdateEvent : MonoBehaviour
+{
     int id;
     float f;
     // Use this for initialization
-    void Start () {
+    void Start ()
+    {
         f = Time.timeSinceLevelLoad;
         print( f );
         id = ccUpdateEvent.Instance.f_RegEvent( 3.5f , cc );
         //ccUpdateEvent.Instance.f_RegEvent( ccUpdateEvent.m_sTimeEvent );
     }
 
-    private void cc ( object data )
+    private void cc ( object data , float fTime )
     {
         //print( "Time : " + ( Time.timeSinceLevelLoad - f ) );
-        print( data );
+        print( data  + "   ,  " + fTime );
     }
 
     // Update is called once per frame
-    void Update () {
+    void Update ()
+    {
         if ( Input.GetKeyDown( KeyCode.Space ) )
         {
             print( ccUpdateEvent.Instance.f_GetTimeEventExcuteCount( id ) );

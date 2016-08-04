@@ -15,7 +15,6 @@ public class test_ccTimeEvent : MonoBehaviour
         id = ccTimeEvent.Instance.f_RegEvent( 3.15f , cc , false );
         print( ccTimeEvent.Instance.f_GetTimeEventExcuteTime( id ) );
         print( ccTimeEvent.Instance.f_GetTimeEventExcuteTime( 11 ) );
-
     }
 
     private void cc ( object data )

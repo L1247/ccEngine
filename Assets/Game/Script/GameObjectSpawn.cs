@@ -14,49 +14,13 @@ public class GameObjectSpawn : MonoBehaviour
     void Start ()
     {
         Application.targetFrameRate = 60;
-        //print( ( decimal ) 0 );
-        //float f =1f;
-        //decimal d ;
-        //d = ( decimal ) f;
-        //for ( int i = 0 ; i < 10 ; i++ )
-        //{
-        //    d -= 0.1m;
-        //    print( d );
-        //} 
-        //float f = 1f;
-        //double d;
-        //d = ( double ) f;
-        //for ( int i = 0 ; i < 10 ; i++ )
-        //{
-        //    d -= 0.1d;
-        //    print( d );
-        //}
-        //for ( int i = 0 ; i < 10 ; i++ )
-        //{
-        //    f -= 0.1f;
-        //    print( f  );
-        //    print( Mathf.Abs( f ) < 0.01f );
-        //}
-        //print( "Next" );
-        //f = 0.5f;
-        //for ( int i = 0 ; i < 5 ; i++ )
-        //{
-        //    f -= 0.1f;
-        //    print( f );
-        //    print( Mathf.Abs( f ) < 0.01f );
-        //}
         PreSpawan();
-        //StartSpawn();
     }
 
     public void StartSpawn ()
     {
         Application.targetFrameRate = 60;
-        //ccEngine.ccTimeEvent.Instance.CloseValue = 0.05f;
-        //ccEngine.ccTimeEvent.Instance.CheckTime = 0.05f;
-        //ccEngine.ccTimeEvent.Instance.CloseValue = 0.002f;
         callTime = Time.timeSinceLevelLoad;
-        //print( callTime );
         SpawnListData _SpwanListData = null;
         for ( int i = 0 ; i < DataPool.SpawnListDT.SpawnListDataList.Count ; i++ )
         {
@@ -67,9 +31,7 @@ public class GameObjectSpawn : MonoBehaviour
             [ DataPool.SpawnListDT.SpawnListDataList.Count - 1 ];
 
         //註冊延遲兩秒遊戲結束
-        //ccEngine.ccTimeEvent.Instance.f_RegEvent( _SpwanListData.Spawntime + 2 ,
-        //        false , OnGameEnd , true );
-        //print( ccEngine.ccTimeEvent.Instance.CloseValue );
+        ccEngine.ccTimeEvent.Instance.f_RegEvent( _SpwanListData.Spawntime + 2 , OnGameEnd , false , true );
     }
 
     private void OnGameEnd ( object data )
